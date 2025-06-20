@@ -1,0 +1,23 @@
+const { DataTypes } = require('sequelize');
+const sequelize = require('./db');
+
+const Quiz = sequelize.define('Quiz', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true
+  },
+  naziv: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  pitanja: {
+    type: DataTypes.JSONB,
+    allowNull: false
+  }
+}, {
+  tableName: 'quizzes',
+  timestamps: false
+});
+
+module.exports = Quiz;
