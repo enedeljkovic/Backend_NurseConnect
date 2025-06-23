@@ -14,6 +14,10 @@ const Quiz = sequelize.define('Quiz', {
   pitanja: {
     type: DataTypes.JSONB,
     allowNull: false
+  },
+  predmet: {  
+    type: DataTypes.STRING,
+    allowNull: false
   }
 }, {
   tableName: 'quizzes',

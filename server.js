@@ -225,20 +225,62 @@ app.get('/quizzes/:id', async (req, res) => {
   try {
     const quiz = await Quiz.findByPk(req.params.id);
     if (!quiz) return res.status(404).json({ error: 'Kviz nije pronađen.' });
-    res.json(quiz);
+
+    let pitanja = quiz.pitanja;
+
+  
+    if (typeof pitanja === 'string') {
+      try {
+        pitanja = JSON.parse(pitanja);
+      } catch (e) {
+        return res.status(500).json({ error: 'Pitanja nisu validan JSON.' });
+      }
+    }
+
+    res.json({ ...quiz.toJSON(), pitanja });
   } catch (error) {
+    console.error('Greška pri dohvaćanju kviza:', error);
     res.status(500).json({ error: 'Greška na serveru.' });
   }
 });
+
+
+app.get('/quizzes/subject/:predmet', async (req, res) => {
+  try {
+    const kvizovi = await Quiz.findAll({
+      where: { predmet: req.params.predmet }
+    });
+
+    
+    const kvizoviParsed = kvizovi.map(kviz => {
+      let pitanja = kviz.pitanja;
+      if (typeof pitanja === 'string') {
+        try {
+          pitanja = JSON.parse(pitanja);
+        } catch (e) {
+          pitanja = [];
+        }
+      }
+      return { ...kviz.toJSON(), pitanja };
+    });
+
+    res.json(kvizoviParsed);
+  } catch (err) {
+    console.error('Greška pri dohvaćanju kvizova po predmetu:', err);
+    res.status(500).json({ error: 'Greška na serveru.' });
+  }
+});
+
+
 // 📌 POST route to add a new quiz
 app.post('/quizzes', async (req, res) => {
   try {
-    const { naziv, pitanja } = req.body;
+    const { naziv, pitanja, predmet } = req.body;
 
-   
     const noviKviz = await Quiz.create({
       naziv,
-      pitanja 
+      pitanja,
+      predmet 
     });
 
     res.status(201).json({ message: 'Kviz uspješno dodan!', quiz: noviKviz });
