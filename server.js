@@ -4,6 +4,8 @@ const { Sequelize } = require('sequelize');
 const Profesor = require('./Models/profesor');
 const multer = require('multer');
 const path = require('path');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 const sequelize = new Sequelize('NurseConnect', 'postgres', 'fdg5ahee', {
   host: 'localhost',
   dialect: 'postgres',
@@ -11,6 +13,7 @@ const sequelize = new Sequelize('NurseConnect', 'postgres', 'fdg5ahee', {
 const Student = require('./Models/student');
 const Material = require('./Models/material');
 const Quiz = require('./Models/quiz');
+const Admin = require('./Models/admin');
 
 const app = express();
 const port = 3001;
@@ -47,6 +50,18 @@ function generateKey() {
 sequelize.sync()
   .then(() => console.log('Baza podataka je sinkronizirana!'))
   .catch((error) => console.error('Greška pri sinkronizaciji baze:', error));
+
+
+app.get('/students', async (req, res) => {
+  try {
+    const studenti = await Student.findAll();
+    res.json(studenti);
+  } catch (error) {
+    console.error('Greška pri dohvaćanju studenata:', error);
+    res.status(500).json({ error: 'Greška na serveru.' });
+  }
+});
+
 
 // POST route to register student
 app.post('/students', async (req, res) => {
@@ -402,6 +417,27 @@ app.post('/upload', upload.single('file'), (req, res) => {
     res.status(200).json({ fileUrl: filePath });
   });
   
+
+  app.post('/admin/login', async (req, res) => {
+    console.log('POZVANA /admin/login ruta');
+  const { email, password } = req.body;
+
+  try {
+    const admin = await Admin.findOne({ where: { email } });
+    console.log('ADMIN IZ BAZE:', admin);
+    if (!admin) return res.status(401).json({ error: 'Neispravni podaci.' });
+
+    const isMatch = await bcrypt.compare(password, admin.lozinka);
+    if (!isMatch) return res.status(401).json({ error: 'Neispravni podaci.' });
+
+    const token = jwt.sign({ id: admin.id, role: 'admin' }, 'tajna_lozinka');
+    res.json({ token });
+    console.log('PRIMLJENI PODACI:', req.body);
+
+  } catch (error) {
+    res.status(500).json({ error: 'Greška na serveru.' });
+  }
+});
 
 
 app.listen(port, () => {
