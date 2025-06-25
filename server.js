@@ -326,6 +326,23 @@ app.post('/quizzes/:id/check-answers', async (req, res) => {
 });
 
 
+// DELETE kviz po ID
+app.delete('/quizzes/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const kviz = await Quiz.findByPk(id);
+    if (!kviz) {
+      return res.status(404).json({ error: 'Kviz nije pronađen.' });
+    }
+
+    await kviz.destroy();
+    res.status(200).json({ poruka: 'Kviz uspješno obrisan.' });
+  } catch (err) {
+    console.error('Greška pri brisanju kviza:', err);
+    res.status(500).json({ error: 'Greška na serveru.' });
+  }
+});
+
 
 
 app.post('/check-answers', async (req, res) => {
