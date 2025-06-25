@@ -6,6 +6,10 @@ const multer = require('multer');
 const path = require('path');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const Subject = require('./Models/subject');
+const SolvedQuiz = require('./Models/SolvedQuiz');
+
+
 const sequelize = new Sequelize('NurseConnect', 'postgres', 'fdg5ahee', {
   host: 'localhost',
   dialect: 'postgres',
@@ -47,9 +51,20 @@ function generateKey() {
     return crypto.randomBytes(8).toString('hex');
 }
 
+Profesor.associate({ Subject });
+Subject.associate({ Profesor });
+
+Student.hasMany(SolvedQuiz);
+SolvedQuiz.belongsTo(Student);
+Quiz.hasMany(SolvedQuiz);
+SolvedQuiz.belongsTo(Quiz);
+
+
 sequelize.sync()
   .then(() => console.log('Baza podataka je sinkronizirana!'))
   .catch((error) => console.error('Greška pri sinkronizaciji baze:', error));
+
+
 
 
 app.get('/students', async (req, res) => {
@@ -307,7 +322,50 @@ app.post('/quizzes', async (req, res) => {
 
 
 app.post('/quizzes/:id/check-answers', async (req, res) => {
-  const { odgovori } = req.body;
+  const { odgovori, studentId } = req.body;
+
+  const quizId = Number(req.params.id);
+  if (!quizId || isNaN(quizId)) {
+    return res.status(400).json({ error: 'Nevažeći ID kviza.' });
+  }
+
+  try {
+    const quiz = await Quiz.findByPk(quizId);
+    if (!quiz) return res.status(404).json({ error: 'Kviz nije pronađen.' });
+
+    let pitanja = quiz.pitanja;
+    if (typeof pitanja === 'string') {
+      pitanja = JSON.parse(pitanja);
+    }
+
+    const rezultat = pitanja.map((p, i) => {
+      const correct = Array.isArray(p.correct) ? [...p.correct].sort() : [p.correct];
+      const user = Array.isArray(odgovori[i]) ? [...odgovori[i]].sort() : [odgovori[i]];
+      return JSON.stringify(correct) === JSON.stringify(user);
+    });
+
+    const tocno = rezultat.filter(Boolean).length;
+    const ukupno = pitanja.length;
+
+    await sequelize.query(
+      `INSERT INTO "SolvedQuizzes" (studentid, quizid, result, total, solvedat) VALUES ($1, $2, $3, $4, NOW())`,
+      {
+        bind: [studentId, quizId, tocno, ukupno],
+        type: Sequelize.QueryTypes.INSERT
+      }
+    );
+
+    res.json({ rezultat, tocno, ukupno });
+  } catch (error) {
+    console.error('Greška pri spremanju rezultata:', error);
+    res.status(500).json({ error: 'Greška na serveru.' });
+  }
+});
+
+
+
+app.post('/quizzes/:id/spremi-rezultat', async (req, res) => {
+  const { studentId, odgovori } = req.body;
   const quiz = await Quiz.findByPk(req.params.id);
   if (!quiz) return res.status(404).json({ error: 'Kviz nije pronađen.' });
 
@@ -322,8 +380,23 @@ app.post('/quizzes/:id/check-answers', async (req, res) => {
     return JSON.stringify(correct) === JSON.stringify(user);
   });
 
-  res.json({ rezultat });
+  const correctCount = rezultat.filter(r => r).length;
+
+  try {
+    await SolvedQuiz.create({
+      studentId,
+      quizId: req.params.id,
+      correct: correctCount,
+      total: pitanja.length,
+    });
+
+    res.json({ message: 'Rezultat spremljen.', correct: correctCount, total: pitanja.length });
+  } catch (error) {
+    console.error('Greška pri spremanju rezultata:', error);
+    res.status(500).json({ error: 'Greška na serveru.' });
+  }
 });
+
 
 
 // DELETE kviz po ID
@@ -342,6 +415,21 @@ app.delete('/quizzes/:id', async (req, res) => {
     res.status(500).json({ error: 'Greška na serveru.' });
   }
 });
+
+
+app.post('/materials/:id/mark-read', async (req, res) => {
+  const { studentId } = req.body;
+  const materialId = req.params.id;
+
+  try {
+    await ReadMaterial.create({ studentId, materialId });
+    res.json({ message: 'Materijal označen kao pročitan.' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Greška na serveru.' });
+  }
+});
+
 
 
 
@@ -409,20 +497,50 @@ app.post('/login-profesor', async (req, res) => {
 
   // 📌 POST ruta za dodavanje profesora
 app.post('/profesori', async (req, res) => {
-  const { ime, prezime, email, kod } = req.body;
+  const { ime, prezime, email, kod, subjectIds } = req.body;
 
-  if (!ime || !prezime || !email || !kod) {
+  if (!ime || !prezime || !email || !kod || !Array.isArray(subjectIds)) {
     return res.status(400).json({ error: 'Sva polja su obavezna!' });
   }
 
   try {
     const noviProfesor = await Profesor.create({ ime, prezime, email, kod });
+
+    
+    await noviProfesor.setSubjects(subjectIds);
+
     res.status(201).json(noviProfesor);
   } catch (error) {
     console.error('Greška pri dodavanju profesora:', error);
     res.status(500).json({ error: 'Neuspješno dodavanje profesora.' });
   }
 });
+
+app.get('/profesori-sve', async (req, res) => {
+  try {
+    const profesori = await Profesor.findAll({
+      include: [{ model: Subject, through: { attributes: [] } }]
+    });
+    res.json(profesori);
+  } catch (err) {
+    console.error('Greška pri dohvaćanju profesora s predmetima:', err);
+    res.status(500).json({ error: 'Greška na serveru.' });
+  }
+});
+
+
+
+
+app.get('/subjects', async (req, res) => {
+  try {
+    const svi = await Subject.findAll();
+    res.json(svi);
+  } catch (err) {
+    console.error('Greška pri dohvaćanju predmeta:', err);
+    res.status(500).json({ error: 'Greška na serveru kod predmeta.' });
+  }
+});
+
 
 
 app.post('/upload', upload.single('file'), (req, res) => {
@@ -455,6 +573,78 @@ app.post('/upload', upload.single('file'), (req, res) => {
     res.status(500).json({ error: 'Greška na serveru.' });
   }
 });
+
+
+
+
+app.put('/admin/promjena-lozinke', async (req, res) => {
+  const { trenutna, nova } = req.body;
+
+  try {
+    const admin = await Admin.findOne({ where: { email: 'admin@nurseconnect.com' } }); 
+
+    if (!admin) {
+      return res.status(404).json({ error: 'Admin nije pronađen.' });
+    }
+
+    const isMatch = await bcrypt.compare(trenutna, admin.lozinka);
+    if (!isMatch) {
+      return res.status(401).json({ error: 'Trenutna lozinka nije točna.' });
+    }
+
+    const novaHashirana = await bcrypt.hash(nova, 10);
+    admin.lozinka = novaHashirana;
+    await admin.save();
+
+    res.json({ poruka: 'Lozinka uspješno promijenjena!' });
+  } catch (err) {
+    console.error('Greška pri promjeni lozinke:', err);
+    res.status(500).json({ error: 'Greška na serveru.' });
+  }
+});
+
+
+app.get('/admin/statistika', async (req, res) => {
+  try {
+    const studenti = await Student.count();
+    const profesori = await Profesor.count();
+    const materijali = await Material.count();
+    const kvizovi = await Quiz.count();
+
+    res.json({ studenti, profesori, materijali, kvizovi });
+  } catch (err) {
+    console.error('Greška u statistici:', err);
+    res.status(500).json({ error: 'Greška u dohvaćanju statistike.' });
+  }
+});
+
+
+
+
+app.get('/profesori/:id', async (req, res) => {
+  const id = req.params.id;
+
+  try {
+    const profesor = await Profesor.findByPk(id, {
+      include: [
+        {
+          model: Subject,
+          through: { attributes: [] }, 
+        },
+      ],
+    });
+
+    if (!profesor) {
+      return res.status(404).json({ error: 'Profesor nije pronađen.' });
+    }
+
+    res.json(profesor);
+  } catch (err) {
+    console.error('Greška pri dohvaćanju profesora:', err);
+    res.status(500).json({ error: 'Greška na serveru.' });
+  }
+});
+
 
 
 app.listen(port, () => {

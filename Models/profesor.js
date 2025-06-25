@@ -29,4 +29,15 @@ const Profesor = sequelize.define('Profesor', {
   timestamps: false
 });
 
+Profesor.associate = (models) => {
+  Profesor.belongsToMany(models.Subject, {
+    through: {
+      model: 'ProfessorSubjects',
+      unique: false,
+      timestamps: false 
+    },
+    foreignKey: 'profesorId',
+  });
+};
+
 module.exports = Profesor;
