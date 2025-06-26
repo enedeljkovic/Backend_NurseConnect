@@ -80,9 +80,9 @@ app.get('/students', async (req, res) => {
 
 // POST route to register student
 app.post('/students', async (req, res) => {
-    const { ime, prezime, email } = req.body;
+    const { ime, prezime, email, razred } = req.body;
 
-    if (!ime || !prezime || !email) {
+    if (!ime || !prezime || !email || !razred) {
         return res.status(400).json({ error: 'Svi podaci moraju biti prisutni!' });
     }
 
@@ -91,7 +91,8 @@ app.post('/students', async (req, res) => {
             ime,
             prezime,
             email,
-            kod: generateKey()  
+            kod: generateKey(),  
+            razred
         });
 
         res.status(201).json(newStudent);
@@ -100,6 +101,7 @@ app.post('/students', async (req, res) => {
         res.status(500).json({ error: 'Greška pri dodavanju studenta u bazu!' });
     }
 });
+
 
 
 // PUT route to update student by ID
@@ -118,17 +120,21 @@ app.put('/students/:id', (req, res) => {
 });
 
 // DELETE route to delete student by ID
-app.delete('/students/:id', (req, res) => {
-    const studentId = parseInt(req.params.id);
-    const studentIndex = students.findIndex(student => student.id === studentId);
-
-    if (studentIndex === -1) {
-        return res.status(404).json({ error: 'Student not found' });
+app.delete('/students/:id', async (req, res) => {
+  const studentId = req.params.id;
+  try {
+    const deleted = await Student.destroy({ where: { id: studentId } });
+    if (deleted) {
+      res.status(200).json({ message: 'Student obrisan.' });
+    } else {
+      res.status(404).json({ error: 'Student nije pronađen.' });
     }
-
-    students.splice(studentIndex, 1);  
-    res.status(204).send();  
+  } catch (err) {
+    console.error('Greška pri brisanju studenta:', err);
+    res.status(500).json({ error: 'Greška na serveru.' });
+  }
 });
+
 
 // POST route for student login using activation key
 app.post('/login', async (req, res) => {
@@ -168,7 +174,7 @@ app.get('/materials', async (req, res) => {
 app.post('/materials', async (req, res) => {
     console.log(req.body);
 
-    const { naziv, opis, imageUrl, fileUrl, subject } = req.body;
+    const { naziv, opis, imageUrl, fileUrl, subject, razred } = req.body;
 
     // Provjera da su svi podaci prisutni
     if (!naziv || !opis || !subject) {
@@ -181,7 +187,8 @@ app.post('/materials', async (req, res) => {
             opis,
             imageUrl: imageUrl || null,
             fileUrl: fileUrl || null,
-            subject
+            subject,
+            razred
         });
 
         res.status(201).json(newMaterial);
@@ -207,7 +214,9 @@ app.put('/materials/:id', async (req, res) => {
         naziv,
         opis,
         imageUrl: imageUrl || null,
-        fileUrl: fileUrl || null
+        fileUrl: fileUrl || null,
+        subject,
+        razred
       });
   
       res.status(200).json(material);
@@ -237,7 +246,21 @@ app.delete('/materials/:id', async (req, res) => {
     }
   });
   
-  
+  app.get('/materials/subject/:predmet/razred/:razred', async (req, res) => {
+  try {
+    const { predmet, razred } = req.params;
+
+    const materijali = await Material.findAll({
+      where: { subject: predmet, razred }
+    });
+
+    res.status(200).json(materijali);
+  } catch (err) {
+    console.error('Greška pri dohvaćanju materijala po predmetu i razredu:', err);
+    res.status(500).json({ error: 'Greška na serveru.' });
+  }
+});
+
 
 
 // 📌 GET route to fetch all quizzes
@@ -277,40 +300,44 @@ app.get('/quizzes/:id', async (req, res) => {
 
 app.get('/quizzes/subject/:predmet', async (req, res) => {
   try {
-    const kvizovi = await Quiz.findAll({
-      where: { predmet: req.params.predmet }
-    });
+  const kvizovi = await Quiz.findAll({
+    where: {
+      predmet: req.params.predmet
+    }
+  });
 
-    
-    const kvizoviParsed = kvizovi.map(kviz => {
-      let pitanja = kviz.pitanja;
-      if (typeof pitanja === 'string') {
-        try {
-          pitanja = JSON.parse(pitanja);
-        } catch (e) {
-          pitanja = [];
-        }
+  const kvizoviParsed = kvizovi.map(kviz => {
+    let pitanja = kviz.pitanja;
+    if (typeof pitanja === 'string') {
+      try {
+        pitanja = JSON.parse(pitanja);
+      } catch (e) {
+        pitanja = [];
       }
-      return { ...kviz.toJSON(), pitanja };
-    });
+    }
+    return { ...kviz.toJSON(), pitanja };
+  });
 
-    res.json(kvizoviParsed);
-  } catch (err) {
-    console.error('Greška pri dohvaćanju kvizova po predmetu:', err);
-    res.status(500).json({ error: 'Greška na serveru.' });
-  }
+  res.json(kvizoviParsed);
+} catch (err) {
+  console.error('🔥 Greska u /quizzes/subject/:predmet:', err);
+  res.status(500).json({ error: 'Greška na serveru.', detalji: err.message });
+}
+
 });
 
 
 // 📌 POST route to add a new quiz
 app.post('/quizzes', async (req, res) => {
   try {
-    const { naziv, pitanja, predmet } = req.body;
+    const { naziv, pitanja, predmet, razred, maxPokusaja } = req.body;
 
     const noviKviz = await Quiz.create({
       naziv,
       pitanja,
-      predmet 
+      predmet,
+      razred,
+      maxPokusaja: maxPokusaja || 1
     });
 
     res.status(201).json({ message: 'Kviz uspješno dodan!', quiz: noviKviz });
@@ -323,8 +350,8 @@ app.post('/quizzes', async (req, res) => {
 
 app.post('/quizzes/:id/check-answers', async (req, res) => {
   const { odgovori, studentId } = req.body;
-
   const quizId = Number(req.params.id);
+
   if (!quizId || isNaN(quizId)) {
     return res.status(400).json({ error: 'Nevažeći ID kviza.' });
   }
@@ -333,11 +360,29 @@ app.post('/quizzes/:id/check-answers', async (req, res) => {
     const quiz = await Quiz.findByPk(quizId);
     if (!quiz) return res.status(404).json({ error: 'Kviz nije pronađen.' });
 
+   
+    const result = await sequelize.query(
+      `SELECT COUNT(*) FROM "SolvedQuizzes" WHERE studentid = $1 AND quizid = $2`,
+      {
+        bind: [studentId, quizId],
+        type: Sequelize.QueryTypes.SELECT,
+      }
+    );
+
+    const brojPokusaja = parseInt(result[0].count || '0', 10);
+    const maxPokusaja = quiz.maxPokusaja || 1;
+
+    if (brojPokusaja >= maxPokusaja) {
+      return res.status(403).json({ error: 'Dosegnut je maksimalan broj pokušaja za ovaj kviz.' });
+    }
+
+    
     let pitanja = quiz.pitanja;
     if (typeof pitanja === 'string') {
       pitanja = JSON.parse(pitanja);
     }
 
+    
     const rezultat = pitanja.map((p, i) => {
       const correct = Array.isArray(p.correct) ? [...p.correct].sort() : [p.correct];
       const user = Array.isArray(odgovori[i]) ? [...odgovori[i]].sort() : [odgovori[i]];
@@ -347,6 +392,7 @@ app.post('/quizzes/:id/check-answers', async (req, res) => {
     const tocno = rezultat.filter(Boolean).length;
     const ukupno = pitanja.length;
 
+   
     await sequelize.query(
       `INSERT INTO "SolvedQuizzes" (studentid, quizid, result, total, solvedat) VALUES ($1, $2, $3, $4, NOW())`,
       {
@@ -355,6 +401,7 @@ app.post('/quizzes/:id/check-answers', async (req, res) => {
       }
     );
 
+    
     res.json({ rezultat, tocno, ukupno });
   } catch (error) {
     console.error('Greška pri spremanju rezultata:', error);
@@ -362,6 +409,31 @@ app.post('/quizzes/:id/check-answers', async (req, res) => {
   }
 });
 
+
+app.get('/solved/:studentId/:quizId', async (req, res) => {
+  const { studentId, quizId } = req.params;
+
+  try {
+    const result = await sequelize.query(
+      `SELECT result, total FROM "SolvedQuizzes" WHERE studentid = $1 AND quizid = $2 LIMIT 1`,
+      {
+        bind: [studentId, quizId],
+        type: Sequelize.QueryTypes.SELECT,
+      }
+    );
+
+    if (result.length > 0) {
+      const { result: tocno, total } = result[0];
+      const rezultat = Array.from({ length: total }, (_, i) => i < tocno);
+      return res.json({ solved: true, rezultat });
+    } else {
+      return res.json({ solved: false });
+    }
+  } catch (err) {
+    console.error('Greška pri provjeri rješenja:', err);
+    res.status(500).json({ error: 'Greška na serveru.' });
+  }
+});
 
 
 app.post('/quizzes/:id/spremi-rezultat', async (req, res) => {
@@ -397,6 +469,49 @@ app.post('/quizzes/:id/spremi-rezultat', async (req, res) => {
   }
 });
 
+app.get('/quizzes/:quizId/solved/:studentId', async (req, res) => {
+  const { quizId, studentId } = req.params;
+
+  try {
+    const quiz = await Quiz.findByPk(quizId);
+    if (!quiz) return res.status(404).json({ error: 'Kviz nije pronađen.' });
+
+    const solved = await sequelize.query(
+      `SELECT * FROM "SolvedQuizzes" WHERE studentid = $1 AND quizid = $2 LIMIT 1`,
+      {
+        bind: [studentId, quizId],
+        type: Sequelize.QueryTypes.SELECT,
+      }
+    );
+
+    if (!solved.length) {
+      return res.json({ alreadySolved: false });
+    }
+
+    const { result, total } = solved[0];
+
+    
+    let pitanja = quiz.pitanja;
+    if (typeof pitanja === 'string') {
+      pitanja = JSON.parse(pitanja);
+    }
+
+    const rezultat = Array.from({ length: total }, (_, i) => i < result);
+
+    res.json({
+      alreadySolved: true,
+      rezultat,
+      odgovori: [], 
+      quiz: { ...quiz.toJSON(), pitanja }
+    });
+  } catch (err) {
+    console.error('Greška pri provjeri kviza:', err);
+    res.status(500).json({ error: 'Greška na serveru.' });
+  }
+});
+
+
+
 
 
 // DELETE kviz po ID
@@ -430,6 +545,32 @@ app.post('/materials/:id/mark-read', async (req, res) => {
   }
 });
 
+app.get('/quizzes/subject/:predmet/razred/:razred', async (req, res) => {
+  try {
+    const { predmet, razred } = req.params;
+
+    const kvizovi = await Quiz.findAll({
+      where: { predmet, razred }
+    });
+
+    const kvizoviParsed = kvizovi.map(kviz => {
+      let pitanja = kviz.pitanja;
+      if (typeof pitanja === 'string') {
+        try {
+          pitanja = JSON.parse(pitanja);
+        } catch (e) {
+          pitanja = [];
+        }
+      }
+      return { ...kviz.toJSON(), pitanja };
+    });
+
+    res.json(kvizoviParsed);
+  } catch (err) {
+    console.error('Greška pri dohvaćanju kvizova po predmetu i razredu:', err);
+    res.status(500).json({ error: 'Greška na serveru.' });
+  }
+});
 
 
 

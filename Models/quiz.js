@@ -18,6 +18,14 @@ const Quiz = sequelize.define('Quiz', {
   predmet: {  
     type: DataTypes.STRING,
     allowNull: false
+  },
+  razred: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  maxPokusaja: {
+    type: DataTypes.INTEGER,
+    allowNull: true
   }
 }, {
   tableName: 'quizzes',

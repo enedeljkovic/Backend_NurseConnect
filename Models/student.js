@@ -22,6 +22,10 @@ const Student = sequelize.define('Student', { // Ovo može ostati u jednini
     kod: {
         type: DataTypes.STRING,
         allowNull: false
+    },
+    razred: {
+        type: DataTypes.STRING, // npr. "A", "B", "C"
+        allowNull: false
     }
 }, {
     tableName: 'students',  // Eksplicitno navodimo ime tablice

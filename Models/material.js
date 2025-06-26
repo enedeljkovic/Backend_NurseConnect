@@ -32,6 +32,10 @@ const Material = sequelize.define('Material', {
   subject: { 
     type: DataTypes.STRING,
     allowNull: false
+  },
+  razred: {
+    type: DataTypes.STRING,
+    allowNull: false
   }
 }, 
 {
