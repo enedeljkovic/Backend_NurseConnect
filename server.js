@@ -8,6 +8,8 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const Subject = require('./Models/subject');
 const SolvedQuiz = require('./Models/SolvedQuiz');
+const Message = require('./Models/message');
+const { Op } = require('sequelize');
 
 
 const sequelize = new Sequelize('NurseConnect', 'postgres', 'fdg5ahee', {
@@ -657,6 +659,19 @@ app.post('/profesori', async (req, res) => {
   }
 });
 
+app.get('/profesori', async (req, res) => {
+  try {
+    const profesori = await Profesor.findAll({
+      attributes: ['id', 'ime', 'prezime', 'email'],
+    });
+    res.json(profesori);
+  } catch (err) {
+    console.error('Greška pri dohvaćanju profesora:', err);
+    res.status(500).json({ error: 'Greška na serveru' });
+  }
+});
+
+
 app.get('/profesori-sve', async (req, res) => {
   try {
     const profesori = await Profesor.findAll({
@@ -785,6 +800,104 @@ app.get('/profesori/:id', async (req, res) => {
     res.status(500).json({ error: 'Greška na serveru.' });
   }
 });
+
+
+// Slanje poruke
+app.post('/messages', async (req, res) => {
+  const { senderId, receiverId, content } = req.body;
+  try {
+    const message = await Message.create({ senderId, receiverId, content });
+    res.status(201).json(message);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Greška pri slanju poruke.' });
+  }
+});
+
+// Dohvaćanje razgovora između dva profesora
+app.get('/messages/:senderId/:receiverId', async (req, res) => {
+  const { senderId, receiverId } = req.params;
+  try {
+    const messages = await Message.findAll({
+      where: {
+        [Op.or]: [
+          { senderId: senderId, receiverId: receiverId },
+          { senderId: receiverId, receiverId: senderId }
+        ]
+      },
+      order: [['timestamp', 'ASC']]
+    });
+    res.json(messages);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Greška pri dohvaćanju poruka.' });
+  }
+});
+
+
+app.get('/unread-count/:receiverId', async (req, res) => {
+  const { receiverId } = req.params;
+  try {
+    const counts = await Message.findAll({
+      attributes: ['senderId', [sequelize.fn('COUNT', sequelize.col('id')), 'unreadCount']],
+      where: {
+        receiverId,
+        read: false
+      },
+      group: ['senderId']
+    });
+    res.json(counts);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Greška pri dohvaćanju broja nepročitanih poruka.' });
+  }
+});
+
+
+app.put('/messages/mark-as-read', async (req, res) => {
+  const { senderId, receiverId } = req.body;
+  try {
+    await Message.update(
+      { read: true },
+      {
+        where: {
+          senderId,
+          receiverId,
+          read: false
+        }
+      }
+    );
+    res.sendStatus(200);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Greška pri označavanju poruka kao pročitanih.' });
+  }
+});
+
+
+app.get('/messages/unread/:receiverId', async (req, res) => {
+  const { receiverId } = req.params;
+  try {
+    const messages = await Message.findAll({
+      where: {
+        receiverId,
+        read: false
+      }
+    });
+
+    const counts = {};
+    messages.forEach(msg => {
+      counts[msg.senderId] = (counts[msg.senderId] || 0) + 1;
+    });
+
+    res.json(counts);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Greška pri dohvaćanju nepročitanih poruka.' });
+  }
+});
+
+
 
 
 
