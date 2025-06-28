@@ -518,20 +518,26 @@ app.get('/quizzes/:quizId/solved/:studentId', async (req, res) => {
 
 // DELETE kviz po ID
 app.delete('/quizzes/:id', async (req, res) => {
-  const { id } = req.params;
-  try {
-    const kviz = await Quiz.findByPk(id);
-    if (!kviz) {
-      return res.status(404).json({ error: 'Kviz nije pronađen.' });
-    }
+  const id = req.params.id;
 
-    await kviz.destroy();
-    res.status(200).json({ poruka: 'Kviz uspješno obrisan.' });
+  try {
+    
+    await SolvedQuiz.destroy({ where: { quizId: id } });
+
+    
+    const deleted = await Quiz.destroy({ where: { id } });
+
+    if (deleted) {
+      res.json({ message: 'Kviz obrisan.' });
+    } else {
+      res.status(404).json({ message: 'Kviz nije pronađen.' });
+    }
   } catch (err) {
-    console.error('Greška pri brisanju kviza:', err);
-    res.status(500).json({ error: 'Greška na serveru.' });
+    console.error('Greška prilikom brisanja kviza:', err);
+    res.status(500).json({ message: 'Greška na serveru.' });
   }
 });
+
 
 
 app.post('/materials/:id/mark-read', async (req, res) => {
@@ -814,6 +820,32 @@ app.post('/messages', async (req, res) => {
   }
 });
 
+
+app.get('/messages/unread/:receiverId', async (req, res) => {
+  const { receiverId } = req.params;
+  try {
+    const messages = await Message.findAll({
+      where: {
+        receiverId,
+        read: false
+      }
+    });
+
+    const counts = {};
+    messages.forEach(msg => {
+      counts[msg.senderId] = (counts[msg.senderId] || 0) + 1;
+    });
+
+    res.json(counts);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Greška pri dohvaćanju nepročitanih poruka.' });
+  }
+});
+
+
+
+
 // Dohvaćanje razgovora između dva profesora
 app.get('/messages/:senderId/:receiverId', async (req, res) => {
   const { senderId, receiverId } = req.params;
@@ -833,6 +865,27 @@ app.get('/messages/:senderId/:receiverId', async (req, res) => {
     res.status(500).json({ error: 'Greška pri dohvaćanju poruka.' });
   }
 });
+
+app.post('/messages/mark-read', async (req, res) => {
+  const { senderId, receiverId } = req.body;
+  try {
+    await Message.update(
+      { read: true },
+      {
+        where: {
+          senderId,
+          receiverId,
+          read: false
+        }
+      }
+    );
+    res.sendStatus(200);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Greška prilikom označavanja pročitanih poruka.' });
+  }
+});
+
 
 
 app.get('/unread-count/:receiverId', async (req, res) => {
@@ -875,29 +928,63 @@ app.put('/messages/mark-as-read', async (req, res) => {
 });
 
 
-app.get('/messages/unread/:receiverId', async (req, res) => {
-  const { receiverId } = req.params;
+
+app.get('/api/v1/professor/:id/quiz-summary', async (req, res) => {
   try {
-    const messages = await Message.findAll({
-      where: {
-        receiverId,
-        read: false
-      }
-    });
+    const professorId = req.params.id;
 
-    const counts = {};
-    messages.forEach(msg => {
-      counts[msg.senderId] = (counts[msg.senderId] || 0) + 1;
-    });
+    const quizzes = await Quiz.findAll({ where: { profesorId: professorId } });
+    const quizIds = quizzes.map(q => q.id);
 
-    res.json(counts);
+    const solved = await SolvedQuiz.findAll({ where: { quizId: quizIds } });
+
+    const totalAttempts = solved.length;
+    const totalCorrect = solved.reduce((acc, s) => acc + s.correct, 0);
+    const totalQuestions = solved.reduce((acc, s) => acc + s.total, 0);
+
+    const avgScore = totalQuestions > 0 ? Math.round((totalCorrect / totalQuestions) * 100) : 0;
+
+    res.json({
+      totalQuizzes: quizzes.length,
+      totalAttempts,
+      avgScore
+    });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Greška pri dohvaćanju nepročitanih poruka.' });
+    res.status(500).json({ message: 'Greška pri dohvaćanju analize' });
   }
 });
 
+// GET /profesori/:id/quiz-statistics
+app.get('/profesori/:id/quiz-statistics', async (req, res) => {
+  const profesorId = req.params.id;
 
+  try {
+    const quizzes = await Quiz.findAll({ where: { profesorId } });
+
+    const statistics = await Promise.all(
+      quizzes.map(async (quiz) => {
+        const solved = await SolvedQuiz.findAll({ where: { quizId: quiz.id } });
+
+        const brojPokusaja = solved.length;
+        const ukupnoBodova = solved.reduce((sum, q) => sum + q.correct, 0);
+        const ukupnoMoguce = solved.reduce((sum, q) => sum + q.total, 0);
+
+        return {
+          naziv: quiz.naziv,
+          razred: quiz.razred,
+          brojPokusaja,
+          prosjek: ukupnoMoguce > 0 ? Math.round((ukupnoBodova / ukupnoMoguce) * 100) : 0
+        };
+      })
+    );
+
+    res.json(statistics);
+  } catch (err) {
+    console.error('Greška pri dohvaćanju statistike:', err);
+    res.status(500).json({ message: 'Greška na serveru.' });
+  }
+});
 
 
 

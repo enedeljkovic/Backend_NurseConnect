@@ -26,7 +26,11 @@ const Quiz = sequelize.define('Quiz', {
   maxPokusaja: {
     type: DataTypes.INTEGER,
     allowNull: true
-  }
+  },
+  profesorId: {
+  type: DataTypes.INTEGER,
+  allowNull: false,
+},
 }, {
   tableName: 'quizzes',
   timestamps: false

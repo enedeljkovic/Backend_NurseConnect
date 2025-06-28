@@ -10,6 +10,7 @@ const SolvedQuiz = sequelize.define('SolvedQuiz', {
   quizId: {
     type: DataTypes.INTEGER,
     allowNull: false,
+    field: 'quizid'
   },
   correct: {
     type: DataTypes.INTEGER,
