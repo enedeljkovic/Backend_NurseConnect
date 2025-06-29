@@ -13,7 +13,7 @@ const SolvedQuiz = sequelize.define('SolvedQuiz', {
     allowNull: false,
     field: 'quizid'
   },
-  correct: {
+  result: {
     type: DataTypes.INTEGER,
     allowNull: false,
     field: 'result'
@@ -33,7 +33,7 @@ const SolvedQuiz = sequelize.define('SolvedQuiz', {
   timestamps: false,
   defaultScope: {
     attributes: {
-      exclude: ['StudentId', 'QuizId']  // makni aliasirane fk polja
+      exclude: ['StudentId', 'QuizId']  
     }
   }
 });
