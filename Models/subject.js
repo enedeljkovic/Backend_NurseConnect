@@ -1,4 +1,4 @@
-// Models/subject.js
+
 const { DataTypes } = require('sequelize');
 const sequelize = require('./db');
 

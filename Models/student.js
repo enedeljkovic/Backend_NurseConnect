@@ -1,7 +1,7 @@
 const { DataTypes } = require('sequelize');
 const sequelize = require('./db');
 
-const Student = sequelize.define('Student', { // Ovo može ostati u jednini
+const Student = sequelize.define('Student', { 
     id: {
         type: DataTypes.INTEGER,
         primaryKey: true,
@@ -24,12 +24,12 @@ const Student = sequelize.define('Student', { // Ovo može ostati u jednini
         allowNull: false
     },
     razred: {
-        type: DataTypes.STRING, // npr. "A", "B", "C"
+        type: DataTypes.STRING, 
         allowNull: false
     }
 }, {
-    tableName: 'students',  // Eksplicitno navodimo ime tablice
-    freezeTableName: true,  // Sprečava Sequelize da mijenja ime tablice
+    tableName: 'students',  
+    freezeTableName: true,  
     timestamps: false
 });
 

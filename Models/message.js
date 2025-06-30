@@ -1,5 +1,5 @@
 const { DataTypes } = require('sequelize');
-const sequelize = require('./db'); // ili './index' ako koristiš globalni instance
+const sequelize = require('./db'); 
 
 const Message = sequelize.define('Message', {
   senderId: {

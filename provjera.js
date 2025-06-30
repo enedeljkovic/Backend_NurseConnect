@@ -1,7 +1,7 @@
 const bcrypt = require('bcrypt');
 
-const hash = '$2a$10$JUBmzaTVEBgrkOz58k7a5uKtiBvJCiqXKEtyspdpNxEb2SLkcVO1S'; // tvoj hash
-const lozinka = 'admin123'; // test lozinka
+const hash = '$2a$10$JUBmzaTVEBgrkOz58k7a5uKtiBvJCiqXKEtyspdpNxEb2SLkcVO1S'; 
+const lozinka = 'admin123'; 
 
 bcrypt.compare(lozinka, hash).then(result => {
   if (result) {
